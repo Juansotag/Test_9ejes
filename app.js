@@ -407,7 +407,7 @@ function showAnswersScreen() {
     quizData.candidates.forEach(candidate => {
         const card = document.createElement('div');
         card.className = 'candidate-selector-card animate-in';
-        const profilePath = candidate.profilePic ? `<img src="${candidate.profilePic}" style="width: 20px; height: 20px; border-radius: 50%; vertical-align: middle; margin-right: 6px;">` : '';
+
         card.innerHTML = `
             <img src="${candidate.photo || 'https://via.placeholder.com/80'}" alt="${candidate.name}">
             <h3>${candidate.name}</h3>
@@ -434,8 +434,6 @@ function showCandidateDetail(candidate, fromResults = false) {
     // Use a default image if not found
     const detailPhotoPath = candidate.photo || 'https://via.placeholder.com/150?text=Candidato';
     const detailPartyPath = candidate.partyLogo || 'https://via.placeholder.com/60?text=P';
-    const detailProfilePath = candidate.profilePic ? `<img src="${candidate.profilePic}" style="width: 24px; height: 24px; border-radius: 50%; vertical-align: middle; margin-right: 10px;">` : '';
-
     detailPhoto.src = detailPhotoPath;
     detailName.innerText = candidate.name;
     detailParty.innerHTML = `<img src="${detailPartyPath}" style="height: 24px; vertical-align: middle; margin-right: 8px;"> ${candidate.party}`;
@@ -589,7 +587,7 @@ function showResults() {
         // Use a default image if not found
         const photoPath = c.photo || 'https://via.placeholder.com/150?text=Candidato';
         const partyPath = c.partyLogo || 'https://via.placeholder.com/60?text=P';
-        const profilePath = c.profilePic ? `<img src="${c.profilePic}" style="width: 24px; height: 24px; border-radius: 50%; vertical-align: middle; margin-right: 10px;">` : '';
+
 
         card.innerHTML = `
             <div class="rank-number">#${index + 1}</div>
