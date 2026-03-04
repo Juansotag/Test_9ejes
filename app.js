@@ -412,7 +412,6 @@ function showAnswersScreen() {
             <img src="${candidate.photo || 'https://via.placeholder.com/80'}" alt="${candidate.name}">
             <h3>${candidate.name}</h3>
             <p style="margin-bottom: 8px;">${candidate.party}</p>
-            <div class="profile-tag profile-${(candidate.profile || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s\/_]+/g, '-')}">${profilePath}${(candidate.profile || '').replace(/_/g, ' ')}</div>
         `;
         card.onclick = () => showCandidateDetail(candidate);
         candidatesGrid.appendChild(card);
@@ -439,7 +438,7 @@ function showCandidateDetail(candidate, fromResults = false) {
     detailPhoto.src = detailPhotoPath;
     detailName.innerText = candidate.name;
     detailParty.innerHTML = `<img src="${detailPartyPath}" style="height: 24px; vertical-align: middle; margin-right: 8px;"> ${candidate.party}`;
-    detailProfile.innerHTML = `<div class="profile-tag profile-${(candidate.profile || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s\/_]+/g, '-')}">${detailProfilePath}${(candidate.profile || '').replace(/_/g, ' ')}</div>`;
+    detailProfile.innerHTML = '';
 
     // Campaign URL button
     const campaignBtn = document.getElementById('campaign-url-btn');
@@ -600,7 +599,6 @@ function showResults() {
             <div class="candidate-info">
                 <div class="candidate-name">${c.name}</div>
                 <div class="candidate-party">${c.party}</div>
-                <div class="profile-tag profile-${(c.profile || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s\/_]+/g, '-')}">${profilePath}${(c.profile || '').replace(/_/g, ' ')}</div>
                 <div class="match-bar-bg">
                     <div class="match-bar-fill" style="width: ${c.percentage}%"></div>
                 </div>
