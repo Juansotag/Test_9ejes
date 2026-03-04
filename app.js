@@ -1,37 +1,50 @@
 ﻿// --- Supabase REST API ---
-const SUPABASE_URL = 'https://vsvzquvcuhsngjvdwdnc.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_DJ1mK2CAQLRfYLx17u3_oQ_EL6P_9gE';
+const SUPABASE_URL = 'https://ppdrlciyiwdtryofzwtr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_K0JYSb_ClMwtMqzRxvQkUg_SRJx0paW';
 
 let lastResponseId = null; // guarda el id de la última respuesta guardada
 
-async function saveResponse(answers, sortedCandidates) {
-    try {
-        const row = {
-            respondent_name: userName || 'Anónimo',
-            top_candidate: sortedCandidates[0].name,
-            top_percentage: sortedCandidates[0].percentage,
-            results: sortedCandidates.map(c => ({ name: c.name, percentage: c.percentage }))
-        };
-        Object.entries(answers).forEach(([id, answer]) => {
-            row[`q${id}`] = answer;
-        });
+const LIKERT_OPTIONS = [
+    { value: 4, text: "Muy de acuerdo" },
+    { value: 3, text: "Algo de acuerdo" },
+    { value: 2, text: "Algo en desacuerdo" },
+    { value: 1, text: "Muy en desacuerdo" }
+];
 
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/quiz_responses`, {
+async function saveResponse(answers, userScores, sortedCandidates) {
+    try {
+        const payload = {
+            p_user_agent: navigator.userAgent,
+            p_location_hint: userName || 'Anónimo',
+            p_responses: Object.entries(answers).map(([qid, a]) => ({
+                question_id: parseInt(qid),
+                raw_answer: a.raw,
+                normalized_score: a.normalized
+            })),
+            p_user_scores: Object.entries(userScores).map(([aid, score]) => ({
+                axis_id: parseInt(aid),
+                score: score
+            })),
+            p_results: sortedCandidates.map((c, i) => ({
+                candidate_id: c.id,
+                distance: c.distance,
+                rank: i + 1
+            }))
+        };
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_quiz_session`, {
             method: 'POST',
             headers: {
                 'apikey': SUPABASE_KEY,
                 'Authorization': `Bearer ${SUPABASE_KEY}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=representation'
+                'Content-Type': 'application/json'
             },
-            body: JSON.stringify(row)
+            body: JSON.stringify(payload)
         });
 
         if (response.ok) {
-            const [data] = await response.json();
-            lastResponseId = data?.id || null;
+            const data = await response.json();
+            lastResponseId = data;
             console.log('[Supabase] Respuesta guardada. ID:', lastResponseId);
-            // Habilitar el botón de comentario ahora que tenemos el ID
             const btn = document.getElementById('feedback-submit-btn');
             if (btn) {
                 btn.disabled = false;
@@ -40,7 +53,6 @@ async function saveResponse(answers, sortedCandidates) {
         } else {
             const errText = await response.text();
             console.warn('[Supabase] Error al guardar:', response.status, errText);
-            // El botón queda deshabilitado si no se pudo guardar
             const btn = document.getElementById('feedback-submit-btn');
             if (btn) btn.textContent = 'No disponible';
         }
@@ -56,7 +68,7 @@ async function saveComment(comment) {
     }
     try {
         const response = await fetch(
-            `${SUPABASE_URL}/rest/v1/quiz_responses?id=eq.${lastResponseId}`,
+            `${SUPABASE_URL}/rest/v1/sessions?id=eq.${lastResponseId}`,
             {
                 method: 'PATCH',
                 headers: {
@@ -314,24 +326,27 @@ async function init() {
             'Authorization': `Bearer ${SUPABASE_KEY}`
         };
 
-        // Carga en paralelo: preguntas (con opciones) + candidatos (con respuestas)
-        const [qRes, cRes] = await Promise.all([
-            fetch(`${SUPABASE_URL}/rest/v1/questions?select=id,text,context,question_options(option_key,option_text)&order=id`, { headers }),
-            fetch(`${SUPABASE_URL}/rest/v1/candidates?select=id,name,party,profile,description,campaign_url,photo_url,party_logo_url,profile_pic_url,candidate_answers(question_id,answer)&order=id`, { headers })
+        const [axesRes, qRes, cRes] = await Promise.all([
+            fetch(`${SUPABASE_URL}/rest/v1/axes?select=id,name,pole_negative,pole_positive,weight&order=id`, { headers }),
+            fetch(`${SUPABASE_URL}/rest/v1/questions?select=id,axis_id,code,statement,pole_direction&order=id`, { headers }),
+            fetch(`${SUPABASE_URL}/rest/v1/candidates?select=id,name,party,profile,bio,campaign_url,photo_url,party_logo_url,profile_pic_url,candidate_positions(axis_id,score)&order=id`, { headers })
         ]);
 
-        if (!qRes.ok || !cRes.ok) throw new Error('Error al cargar datos de Supabase');
+        if (!axesRes.ok || !qRes.ok || !cRes.ok) throw new Error('Error al cargar datos de Supabase');
 
-        const [rawQuestions, rawCandidates] = await Promise.all([qRes.json(), cRes.json()]);
+        const [rawAxes, rawQuestions, rawCandidates] = await Promise.all([axesRes.json(), qRes.json(), cRes.json()]);
 
-        // Reconstruir formato compatible con el resto del app
+        const axes = rawAxes.reduce((acc, ax) => {
+            acc[ax.id] = ax;
+            return acc;
+        }, {});
+
         const questions = rawQuestions.map(q => ({
             id: q.id,
-            text: q.text,
-            context: q.context,
-            options: Object.fromEntries(
-                (q.question_options || []).map(o => [o.option_key, o.option_text])
-            )
+            axis_id: q.axis_id,
+            code: q.code,
+            text: q.statement,
+            pole_direction: q.pole_direction
         }));
 
         const candidates = rawCandidates.map(c => ({
@@ -339,17 +354,17 @@ async function init() {
             name: c.name,
             party: c.party,
             profile: c.profile,
-            description: c.description,
+            description: c.bio,
             campaignUrl: c.campaign_url,
             photo: c.photo_url,
             partyLogo: c.party_logo_url,
             profilePic: c.profile_pic_url,
-            answers: Object.fromEntries(
-                (c.candidate_answers || []).map(a => [String(a.question_id), a.answer])
+            positions: Object.fromEntries(
+                (c.candidate_positions || []).map(p => [String(p.axis_id), p.score])
             )
         }));
 
-        quizData = { questions, candidates };
+        quizData = { axes, questions, candidates };
         console.log(`[Supabase] Datos cargados: ${questions.length} preguntas, ${candidates.length} candidatos`);
     } catch (error) {
         console.error('[Supabase] Error cargando datos:', error);
@@ -460,64 +475,74 @@ function showCandidateDetail(candidate, fromResults = false) {
     answersList.innerHTML = `
         <div class="disclaimer-box animate-in">
             <i>⚠️</i>
-            <p>Estas no son necesariamente las respuestas oficiales dadas por el candidato. Representan lo que, de forma interna, el <strong>Laboratorio de Gobierno (GovLab)</strong> considera que serían sus posiciones frente a este dilema.</p>
+            <p>Estas posiciones representan el análisis del <strong>GovLab</strong> frente a 9 ejes ideológicos y de política pública, comparadas con tus propias respuestas.</p>
         </div>
+        <div class="axes-comparison"></div>
     `;
+    
+    const axesContainer = answersList.querySelector('.axes-comparison');
 
-    quizData.questions.forEach(q => {
-        const answerKey = candidate.answers[q.id];
-        const answerText = q.options[answerKey] || 'No respondió';
+    if (quizData && quizData.axes) {
+        Object.values(quizData.axes).forEach(ax => {
+            const candScore = candidate.positions[ax.id] !== undefined ? candidate.positions[ax.id] : 0;
+            const userScore = (cameFromResults && window.lastUserAxisScores) ? window.lastUserAxisScores[ax.id] : null;
 
-        const item = document.createElement('div');
-        item.className = 'answer-item animate-in';
-        item.innerHTML = `
-            <h4>Pregunta ${q.id}: ${q.context}</h4>
-            <p>${q.text}</p>
-            <span class="answer-text-label">Respuesta del candidato: ${answerText}</span>
-        `;
-        answersList.appendChild(item);
-    });
+            const candPct = ((candScore + 1) / 2) * 100;
+            let userMarkerHtml = '';
+            if (userScore !== null) {
+                const userPct = ((userScore + 1) / 2) * 100;
+                userMarkerHtml = `<div class="user-marker" style="left: ${userPct}%;" title="Tú"></div>`;
+            }
+
+            const item = document.createElement('div');
+            item.className = 'axis-item animate-in';
+            item.innerHTML = `
+                <div class="axis-header">
+                    <span class="axis-pole-negative">${ax.pole_negative}</span>
+                    <span class="axis-name">${ax.name}</span>
+                    <span class="axis-pole-positive">${ax.pole_positive}</span>
+                </div>
+                <div class="axis-bar-container">
+                    <span class="axis-center-line"></span>
+                    <div class="axis-track"></div>
+                    <div class="cand-marker" style="left: ${candPct}%;">
+                       ${candidate.photo ? `<img src="${candidate.photo}">` : ''}
+                    </div>
+                    ${userMarkerHtml}
+                </div>
+            `;
+            axesContainer.appendChild(item);
+        });
+    }
 }
 
 function showQuestion() {
-    // ... existing logic ...
     const question = quizData.questions[currentQuestionIndex];
-
-    // Check if question has any valid options
-    const validOptions = Object.entries(question.options).filter(([key, value]) => value !== null && value !== undefined && value !== '');
-
-    if (validOptions.length === 0) {
-        console.warn(`Question ${question.id} has no options. Skipping.`);
-        if (currentQuestionIndex < quizData.questions.length - 1) {
-            currentQuestionIndex++;
-            showQuestion();
-        } else {
-            showResults();
-        }
-        return;
-    }
 
     counter.innerText = `Pregunta ${currentQuestionIndex + 1} de ${quizData.questions.length}`;
     progressBar.style.width = `${((currentQuestionIndex + 1) / quizData.questions.length) * 100}%`;
 
-    contextTag.innerText = question.context || 'General';
+    const axis = quizData.axes[question.axis_id];
+    contextTag.innerText = axis ? `Eje: ${axis.name}` : 'General';
     questionText.innerText = question.text;
 
     optionsContainer.innerHTML = '';
 
-    validOptions.forEach(([key, value]) => {
+    LIKERT_OPTIONS.forEach((opt, index) => {
         const btn = document.createElement('button');
         btn.className = 'option-btn animate-in';
-        btn.style.animationDelay = `${validOptions.findIndex(opt => opt[0] === key) * 0.1}s`;
-        btn.innerText = value;
-        btn.onclick = () => selectOption(key);
+        btn.style.animationDelay = `${index * 0.1}s`;
+        btn.innerText = opt.text;
+        btn.onclick = () => selectOption(opt.value);
         optionsContainer.appendChild(btn);
     });
 }
 
-function selectOption(optionKey) {
-    const questionId = quizData.questions[currentQuestionIndex].id;
-    userAnswers[questionId] = optionKey;
+function selectOption(value) {
+    const question = quizData.questions[currentQuestionIndex];
+    // Normalizar a [-1, 1] y aplicar la dirección del polo
+    const normalized = ((value - 2.5) / 1.5) * question.pole_direction;
+    userAnswers[question.id] = { raw: value, normalized };
 
     if (currentQuestionIndex < quizData.questions.length - 1) {
         currentQuestionIndex++;
@@ -543,25 +568,40 @@ function showResults() {
         resultsSubtitle.textContent = 'Este es el ranking de afinidad con los candidatos basado en tus respuestas:';
     }
 
+    // Calculate user_axis_scores
+    const axisSums = {};
+    const axisCounts = {};
+    Object.values(quizData.axes).forEach(ax => {
+        axisSums[ax.id] = 0;
+        axisCounts[ax.id] = 0;
+    });
+
+    Object.entries(userAnswers).forEach(([qId, ans]) => {
+        const q = quizData.questions.find(x => x.id === parseInt(qId));
+        if (q) {
+            axisSums[q.axis_id] += ans.normalized;
+            axisCounts[q.axis_id]++;
+        }
+    });
+
+    const userAxisScores = {};
+    Object.values(quizData.axes).forEach(ax => {
+        userAxisScores[ax.id] = axisCounts[ax.id] > 0 ? (axisSums[ax.id] / axisCounts[ax.id]) : 0;
+    });
+    window.lastUserAxisScores = userAxisScores;
+
+    const maxDistance = Math.sqrt(Object.keys(quizData.axes).length * Math.pow(2, 2));
+
     const candidates = quizData.candidates.map(candidate => {
-        let matches = 0;
-        let totalAnswered = 0;
-
-        quizData.questions.forEach(q => {
-            const userId = q.id;
-            const userAnswer = userAnswers[userId];
-            const candidateAnswer = candidate.answers[userId];
-
-            if (userAnswer && candidateAnswer) {
-                totalAnswered++;
-                if (userAnswer === candidateAnswer) {
-                    matches++;
-                }
-            }
+        let sumSq = 0;
+        Object.values(quizData.axes).forEach(ax => {
+            const candScore = candidate.positions[ax.id] !== undefined ? candidate.positions[ax.id] : 0;
+            const diff = userAxisScores[ax.id] - candScore;
+            sumSq += diff * diff;
         });
-
-        const percentage = totalAnswered > 0 ? (matches / totalAnswered) * 100 : 0;
-        return { ...candidate, percentage: Math.round(percentage) };
+        const distance = Math.sqrt(sumSq);
+        const percentage = Math.max(0, 100 * (1 - (distance / maxDistance)));
+        return { ...candidate, distance, percentage: Math.round(percentage) };
     });
 
     // Sort by percentage descending
@@ -575,7 +615,7 @@ function showResults() {
     }
 
     // Guardar en Supabase (sin bloquear la UI)
-    saveResponse(userAnswers, candidates);
+    saveResponse(userAnswers, window.lastUserAxisScores, candidates);
 
     resultsList.innerHTML = '';
     candidates.forEach((c, index) => {
