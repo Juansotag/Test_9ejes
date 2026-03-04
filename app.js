@@ -418,6 +418,7 @@ function showAnswersScreen() {
     });
 }
 
+
 function showCandidateDetail(candidate, fromResults = false) {
     cameFromResults = fromResults;
     if (fromResults) {
