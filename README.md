@@ -1,97 +1,142 @@
-# Dilema Electoral: Encuentra tu Candidato
+# Convergencia Electoral: Encuentra tu Candidato
 
-Herramienta interactiva para que ciudadanos colombianos identifiquen cuál precandidato a las **Elecciones Presidenciales 2026** se alinea mejor con sus valores y propuestas.
+Herramienta interactiva para que ciudadanos colombianos identifiquen cuál precandidato a las **Elecciones Presidenciales 2026** se alinea mejor con sus valores y propuestas, a través de un sistema de **9 ejes ideológicos y de política pública**.
+
+Desarrollada por el **Laboratorio de Gobierno (GovLab)** de la Universidad de La Sabana.
 
 ---
 
 ## Características
 
-- **Test de Afinidad**: Cuestionario de 30 preguntas sobre Economía, Trabajo, Salud, Pensiones, Seguridad y Medio Ambiente.
-- **Pantalla de bienvenida personalizada**: Solicita el nombre del usuario antes de comenzar. El nombre aparece en el título de resultados ("*{nombre}*, estos son tus resultados").
-- **Ranking Personalizado**: Al finalizar el test, ranking de afinidad con los 14 candidatos.
-- **Perfiles de Candidatos**: Biografías detalladas de cada candidato, sus posiciones frente a los dilemas y enlace a su página de campaña oficial.
-- **Sección de Comentarios**: Al terminar el test, el usuario puede dejar comentarios, críticas o sugerencias de forma opcional.
-- **Persistencia de datos (Supabase)**: Cada respuesta completa se guarda automáticamente en una base de datos PostgreSQL (Supabase), incluyendo nombre, respuestas por pregunta, candidato top y ranking completo. Los comentarios se vinculan a la misma fila.
-- **Diseño Premium**: Glassmorphism, modo oscuro, animaciones y optimización móvil.
+- **Test de Afinidad por 9 Ejes**: Cuestionario de preguntas tipo Likert organizadas por ejes temáticos (Economía, Trabajo, Salud, Seguridad, Medio Ambiente, entre otros).
+- **Algoritmo N-Dimensional**: El sistema calcula la distancia euclidiana entre el perfil ideológico del usuario y el de cada candidato en los 9 ejes, generando un porcentaje de afinidad preciso.
+- **Pantalla de bienvenida personalizada**: Solicita el nombre del usuario antes de comenzar. El nombre aparece en el título de resultados (*"Juan, estos son tus resultados"*).
+- **Ranking Personalizado**: Al finalizar el test, ranking de afinidad con los 14 candidatos ordenados de mayor a menor convergencia.
+- **Perfiles de Candidatos**: Visualización de la posición de cada candidato en los 9 ejes, con comparación directa frente a las respuestas del usuario, más biografía detallada y enlace a campaña oficial.
+- **Compartir Resultados**: Generación de imagen descargable con el top 3 de candidatos. Soporte para compartir en Twitter/X, Facebook, WhatsApp, Instagram y Web Share API (móvil nativo).
+- **Sección de Comentarios**: Al terminar el test, el usuario puede dejar comentarios o sugerencias de forma opcional (máx. 200 palabras).
+- **Persistencia de datos (Supabase)**: Cada respuesta se guarda automáticamente en PostgreSQL vía una función RPC (`submit_quiz_session`), incluyendo respuestas por pregunta, scores por eje, ranking de candidatos e ID de sesión para vincular comentarios.
+- **Diseño Premium**: Glassmorphism, modo oscuro, animaciones fluidas y optimización móvil.
 
 ---
 
 ## Tecnologías Utilizadas
 
-- **Frontend**: HTML5, CSS3 (Vanilla), JavaScript (ES6+)
-- **Base de datos**: [Supabase](https://supabase.com) (PostgreSQL) — REST API directa con `fetch()`
-- **Diseño**: Google Fonts (Inter), iconos SVG personalizados
-- **Data**: `data.json` con preguntas y perfiles de candidatos
+- **Frontend**: HTML5, CSS3 (Vanilla), JavaScript ES6+
+- **Base de datos**: [Supabase](https://supabase.com) (PostgreSQL) — REST API y RPC directa con `fetch()`
+- **Captura de imagen**: [html2canvas](https://html2canvas.hertzen.com/)
+- **Fuentes**: Google Fonts (Inter)
+- **Servidor local (opcional)**: Node.js + Express (`server.js`)
 
 ---
 
-## Estructura de archivos
+## Estructura de Archivos
 
 ```
-├── index.html       # Estructura de la app (landing, nombre, quiz, resultados, perfiles)
-├── app.js           # Lógica principal + integración Supabase
-├── style.css        # Estilos y diseño responsivo
-├── data.json        # Preguntas, opciones y perfiles de los 14 candidatos
-├── Candidatos/      # Fotos de candidatos
-├── Partidos/        # Logos de partidos
-└── Perfil/          # Imágenes de perfil por tendencia política
+Test_9ejes/
+├── index.html                  # Estructura de la app (landing, nombre, quiz, resultados, perfiles)
+├── app.js                      # Lógica principal + integración Supabase
+├── style.css                   # Estilos y diseño responsivo
+├── server.js                   # Servidor Express para uso local (Node.js)
+├── package.json                # Dependencias Node
+├── LICENSE                     # Licencia CC BY-NC 4.0
+├── README.md
+├── supabase_migration.sql      # Script de creación de tablas (v1)
+├── supabase_migration_v2.sql   # Script completo con datos (v2)
+├── supabase_rls_patch.sql      # Parche de políticas de seguridad (RLS)
+├── Candidatos/                 # Fotos de los 14 candidatos
+├── Partidos/                   # Logos de los partidos políticos
+├── Perfil/                     # Imágenes de perfil por tendencia ideológica
+└── Íconos/                     # Logos institucionales y portada para compartir
 ```
 
 ---
 
-## Base de datos (Supabase)
+## Base de Datos (Supabase)
 
-### Tabla `quiz_responses`
+La app carga todos los datos dinámicamente desde Supabase al iniciar. No usa archivos JSON locales.
 
-| Columna | Tipo | Descripción |
-|---|---|---|
-| `id` | uuid | Clave primaria auto-generada |
-| `created_at` | timestamptz | Fecha y hora automática de respuesta |
-| `respondent_name` | text | Nombre ingresado por el usuario |
-| `top_candidate` | text | Candidato con mayor afinidad |
-| `top_percentage` | int | % de afinidad del candidato #1 |
-| `q1` … `q30` | text | Respuesta del usuario por pregunta (A/B/C/D/E) |
-| `results` | jsonb | Ranking completo de los 14 candidatos |
-| `comment` | text | Comentario opcional del usuario |
+### Tablas principales
 
-### Setup inicial (ejecutar en Supabase → SQL Editor)
+| Tabla | Descripción |
+|---|---|
+| `axes` | Los 9 ejes ideológicos (nombre, polos, peso) |
+| `questions` | Preguntas del quiz, vinculadas a un eje y con dirección de polo |
+| `candidates` | Perfil de cada candidato (nombre, partido, bio, URLs) |
+| `candidate_positions` | Posición de cada candidato en cada eje (score de -1 a 1) |
+| `sessions` | Sesión guardada por usuario (user agent, nombre, comentario) |
+| `session_responses` | Respuesta normalizada por pregunta por sesión |
+| `session_axis_scores` | Score promedio por eje por sesión |
+| `session_results` | Ranking final de candidatos por sesión |
+
+### Función RPC principal
 
 ```sql
-CREATE TABLE quiz_responses (
-  id               uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  created_at       timestamptz DEFAULT now(),
-  respondent_name  text,
-  top_candidate    text NOT NULL,
-  top_percentage   integer,
-  q1  text, q2  text, q3  text, q4  text, q5  text,
-  q6  text, q7  text, q8  text, q9  text, q10 text,
-  q11 text, q12 text, q13 text, q14 text, q15 text,
-  q16 text, q17 text, q18 text, q19 text, q20 text,
-  q21 text, q22 text, q23 text, q24 text, q25 text,
-  q26 text, q27 text, q28 text, q29 text, q30 text,
-  results jsonb,
-  comment text
+-- Guarda toda la sesión en una sola llamada transaccional
+SELECT submit_quiz_session(
+  p_user_agent,
+  p_location_hint,
+  p_responses,
+  p_user_scores,
+  p_results
 );
-
-ALTER TABLE quiz_responses DISABLE ROW LEVEL SECURITY;
 ```
+
+> Para re-crear la base de datos, ejecutar los archivos `.sql` incluidos en el repositorio en el SQL Editor de Supabase, en este orden:
+> 1. `supabase_migration.sql`
+> 2. `supabase_migration_v2.sql`
+> 3. `supabase_rls_patch.sql`
+
+---
+
+## Los 9 Ejes Ideológicos
+
+| # | Eje | Polo Negativo → Polo Positivo |
+|---|---|---|
+| 1 | Rol del Estado en la Economía | Libre mercado → Intervencionismo |
+| 2 | Política Fiscal | Austeridad → Gasto social |
+| 3 | Seguridad y Justicia | Mano dura → Enfoque social |
+| 4 | Política de Paz | Seguridad militar → Diálogo y paz total |
+| 5 | Medio Ambiente | Desarrollo extractivista → Transición ecológica |
+| 6 | Modelo Social | Conservadurismo → Progresismo |
+| 7 | Descentralización | Centralismo → Autonomía regional |
+| 8 | Política Exterior | Soberanía / aislamiento → Integración global |
+| 9 | Lucha contra la Corrupción | Institucionalismo → Reformismo radical |
 
 ---
 
 ## Instalación y Uso Local
 
+### Opción 1 — Python (sin dependencias)
+
 ```bash
-# 1. Clona o descarga el repositorio
-# 2. Inicia un servidor local
+# Clona el repositorio
+git clone https://github.com/Juansotag/Test_9ejes.git
+cd Test_9ejes
 
+# Inicia el servidor local
 python -m http.server 8001
-
-# 3. Abre http://localhost:8001 en el navegador
 ```
+
+Abre [http://localhost:8001](http://localhost:8001) en tu navegador.
+
+### Opción 2 — Node.js / Express
+
+```bash
+git clone https://github.com/Juansotag/Test_9ejes.git
+cd Test_9ejes
+
+npm install
+npm start
+```
+
+Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
+
+> **Nota:** La app requiere conexión a internet para cargar los datos desde Supabase.
 
 ---
 
-## Candidatos incluidos (2026)
+## Candidatos Incluidos (2026)
 
 | # | Candidato | Partido |
 |---|---|---|
