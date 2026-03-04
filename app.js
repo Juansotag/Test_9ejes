@@ -68,16 +68,18 @@ async function saveComment(comment) {
     }
     try {
         const response = await fetch(
-            `${SUPABASE_URL}/rest/v1/sessions?id=eq.${lastResponseId}`,
+            `${SUPABASE_URL}/rest/v1/rpc/save_session_comment`,
             {
-                method: 'PATCH',
+                method: 'POST',
                 headers: {
                     'apikey': SUPABASE_KEY,
                     'Authorization': `Bearer ${SUPABASE_KEY}`,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ comment })
+                body: JSON.stringify({
+                    p_session_id: lastResponseId,
+                    p_comment: comment
+                })
             }
         );
         return response.ok;
@@ -479,7 +481,7 @@ function showCandidateDetail(candidate, fromResults = false) {
         </div>
         <div class="axes-comparison"></div>
     `;
-    
+
     const axesContainer = answersList.querySelector('.axes-comparison');
 
     if (quizData && quizData.axes) {
